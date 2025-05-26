@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>OCR avec Export Excel</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+    #dropZone {
+      border: 2px dashed #888;
+      padding: 40px;
+      margin: 20px auto;
+      width: 90%;
+      max-width: 500px;
+      background-color: #f9f9f9;
+      cursor: pointer;
+    }
+    #dropZone.hover { background-color: #e0e0ff; }
+    img { max-width: 100%; height: auto; margin-top: 20px; }
+    #output { margin-top: 20px; white-space: pre-wrap; background: #f0f0f0; padding: 10px; text-align: left; }
+    #progressWrapper {
+      margin-top: 10px;
+      background: #ddd;
+      border-radius: 5px;
+      overflow: hidden;
+      height: 20px;
+    }
+    #progressBar {
+      height: 100%;
+      width: 0%;
+      background: #4caf50;
+      transition: width 0.2s;
+    }
+    #exportBtn {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>OCR : Importer, Lire et Exporter</h2>
+  <div id="dropZone">Cliquez ou déposez une image ici</div>
+  <input type="file" id="fileInput" accept="image/*" />
+  <div id="progressWrapper"><div id="progressBar"></div></div>
+  <img id="preview" alt="Aperçu de l'image" />
+  <div id="output">Le texte extrait apparaîtra ici...</div>
+  <button id="exportBtn">Exporter vers Excel</button>
+
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const preview = document.getElementById('preview');
+    const output = document.getElementById('output');
+    const progressBar = document.getElementById('progressBar');
+    const exportBtn = document.getElementById('exportBtn');
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
+      dropZone.addEventListener(event, e => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+    ['dragenter', 'dragover'].forEach(event => {
+      dropZone.addEventListener(event, () => dropZone.classList.add('hover'));
+    });
+    ['dragleave', 'drop'].forEach(event => {
+      dropZone.addEventListener(event, () => dropZone.classList.remove('hover'));
+    });
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('drop', e => {
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) handleFile(file);
+      else output.textContent = "Déposez une image valide.";
+    });
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (file && file.type.startsWith('image/')) handleFile(file);
+      else output.textContent = "Veuillez sélectionner une image.";
+    });
+
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        preview.src = reader.result;
+        output.textContent = "Analyse OCR en cours...";
+        progressBar.style.width = '0%';
+        exportBtn.style.display = 'none';
+
+        Tesseract.recognize(
+          reader.result,
+          'fra',
+          {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                const pct = Math.round(m.progress * 100);
+                progressBar.style.width = pct + '%';
+              }
+            }
+          }
+        ).then(({ data: { text } }) => {
+          output.textContent = text;
+          progressBar.style.width = '100%';
+          exportBtn.style.display = 'inline-block';
+        }).catch(err => {
+          output.textContent = "Erreur OCR : " + err.message;
+          progressBar.style.width = '0%';
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    exportBtn.addEventListener('click', () => {
+      const lines = output.textContent.split('\n').map(line => [line]);
+      const worksheet = XLSX.utils.aoa_to_sheet(lines);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Texte OCR");
+      XLSX.writeFile(workbook, "texte_ocr.xlsx");
+    });
+  </script>
+
+</body>
+</html>
